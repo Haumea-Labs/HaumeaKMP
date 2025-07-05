@@ -1,6 +1,15 @@
 # Haumea KMP Library
 
-A Kotlin Multiplatform library for interacting with the Haumea Labs Remote Config API.
+A Kotlin Multiplatform library for managing remote configuration, event tracking, and logging in your mobile applications.
+
+## Features
+
+- 📱 **Cross-Platform**: Works on Android, iOS, and other Kotlin Multiplatform targets
+- ⚡ **Remote Configuration**: Fetch and manage feature flags and remote settings
+- 📊 **Event Tracking**: Track user events with custom parameters
+- 📝 **Structured Logging**: Send logs with different severity levels
+- 🔄 **Reactive Updates**: Observe configuration changes with StateFlow
+- 🎯 **Automatic User Identification**: Random user ID generation with override capability
 
 ## Installation
 
@@ -11,95 +20,117 @@ Add the dependency to your `build.gradle.kts`:
 sourceSets {
     commonMain {
         dependencies {
-            implementation("com.haumealabs:haumea:1.0.0")
+            implementation("com.haumealabs:haumea:1.0.1")
         }
     }
 }
 
 // For Android projects
-implementation("com.haumealabs:haumea:1.0.0")
+implementation("com.haumealabs:haumea:1.0.1")
 
 // For iOS projects
-pod("Haumea", "com.haumealabs:haumea:1.0.0")
+pod("Haumea", "com.haumealabs:haumea:1.0.1")
 ```
 
 ## Usage
 
-### Basic Usage
+### Initialization
 
 ```kotlin
 import com.haumealabs.haumea.HaumeaClient
-import com.haumealabs.haumea.models.RemoteConfig
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.runBlocking
 
-// Initialize the client
+// Initialize the client with required parameters
 val haumeaClient = HaumeaClient(
     apiKey = "your-api-key",
-    appId = "your-app-id",
-    platform = "android" // or "ios", "web", etc.
+    appId = "your-app-id" // e.g., "com.yourcompany.app"
 )
 
-// Fetch config synchronously
-runBlocking {
-    val config = haumeaClient.fetchConfig()
-    println("Fetched config: $config")
-}
+// Optionally set a custom user ID
+haumeaClient.userId = "custom-user-id"
+```
 
-// Or observe config changes
-runBlocking {
-    haumeaClient.configState.collect { config ->
-        config?.let {
-            println("Config updated: $it")
-        }
+### Remote Configuration
+
+```kotlin
+// Fetch configuration
+haumeaClient.fetchConfig(
+    onSuccess = { config ->
+        // Use the configuration
+        val featureEnabled = config["feature_flag"]?.toBoolean() ?: false
+    },
+    onError = { error ->
+        // Handle error
+    }
+)
+
+// Or observe configuration changes
+haumeaClient.configState.collect { config ->
+    config?.let {
+        // React to config changes
     }
 }
+```
 
+### Event Tracking
+
+```kotlin
+// Track an event
+haumeaClient.addEvent(
+    eventName = "button_click",
+    params = mapOf(
+        "button_name" to "submit",
+        "screen" to "home"
+    ),
+    onSuccess = { response ->
+        // Event sent successfully
+    },
+    onError = { error ->
+        // Handle error
+    }
+)
+```
+
+### Logging
+
+```kotlin
+// Send a log with severity
+haumeaClient.addLog(
+    severity = "info", // "debug", "info", "warn", or "error"
+    message = "User completed onboarding",
+    onSuccess = { response ->
+        // Log sent successfully
+    },
+    onError = { error ->
+        // Handle error
+    }
+)
+```
+
+### Cleanup
+
+```kotlin
 // Don't forget to close the client when done
 haumeaClient.close()
 ```
 
-### Error Handling
+## Error Handling
 
-```kotlin
-try {
-    val config = haumeaClient.fetchConfig()
-    // Handle successful response
-} catch (e: Exception) {
-    // Handle error (network, parsing, etc.)
-    println("Error fetching config: ${e.message}")
-}
-```
+All network operations are non-blocking and include error callbacks. Common error cases include:
 
-## Sample Apps
+- Network connectivity issues
+- Invalid API key or app ID
+- Server errors
 
-- **Android**: Open the project in Android Studio and run the sample app
-- **iOS**: Open `sample/iosApp/iosApp.xcodeproj` in Xcode and run the sample app
+## Sample App
 
-### Publish to MavenLocal
+The repository includes a sample Compose Multiplatform app demonstrating the library's features. To run it:
 
-1) Run `./gradlew :rating:publishToMavenLocal`
-2) Open `~/.m2/repository/com/haumealabs/"}`
+1. Open the project in Android Studio
+2. For Android: Run the `composeApp` configuration
+3. For iOS: Open `sample/iosApp/iosApp.xcodeproj` in Xcode and run
 
-### Publish to MavenCentral
+## Requirements
 
-1) Create a account and a namespace on Sonatype:
-   https://central.sonatype.org/register/central-portal/#create-an-account
-2) Add developer id, name, email and the project url to
-   `/convention-plugins/src/main/kotlin/convention.publication.gradle.kts`
-3) Generate a GPG key:
-   https://getstream.io/blog/publishing-libraries-to-mavencentral-2021/#generating-a-gpg-key-pair
-   ```
-   gpg --full-gen-key
-   gpg --keyserver keyserver.ubuntu.com --send-keys XXXXXXXX
-   gpg --export-secret-key XXXXXXXX > XXXXXXXX.gpg
-   ```
-4) Add the secrets to `local.properties`:
-   ```
-   signing.keyId=XXXXXXXX
-   signing.password=[key password]
-   signing.secretKeyRingFile=../XXXXXXXX.gpg
-   ossrhUsername=[Sonatype token_user]
-   ossrhPassword=[Sonatype token_password]
-   ```
-5) Run `./gradlew :haumeakmp:publishAllPublicationsToSonatypeRepository`
+- Kotlin 1.9.0 or higher
+- Android API 21+
+- iOS 13.0+
