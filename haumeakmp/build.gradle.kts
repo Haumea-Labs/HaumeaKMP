@@ -2,7 +2,8 @@ plugins {
     alias(libs.plugins.multiplatform)
     alias(libs.plugins.android.library)
     alias(libs.plugins.serialization)
-    id("convention.publication")
+    id("com.vanniktech.maven.publish") version "0.33.0"
+    id("signing")
 }
 
 group = "com.haumealabs"
@@ -65,12 +66,14 @@ android {
 
 mavenPublishing {
 
+    publishToMavenCentral(true)
+
     coordinates(group.toString(), "haumea-kmp", version.toString())
 
     pom {
         name.set("Haumea KMP")
         description.set("Kotlin Multiplatform Library for Haumea System")
-        url.set("https://github.com/Haumea-Labs/kmp-rating")
+        url.set("https://github.com/Haumea-Labs/HaumeaKMP")
 
         licenses {
             license {
@@ -86,18 +89,12 @@ mavenPublishing {
             }
         }
         scm {
-            connection.set("scm:git:git://github.com/Haumea-Labs/kmp-rating.git")
-            developerConnection.set("scm:git:ssh://git@github.com:haumealabs/tu-repo.git")
-            url.set("https://github.com/Haumea-Labs/kmp-rating")
-            url.set("https://github.com/Haumea-Labs/kmp-rating")
+            connection.set("scm:git:git://github.com/Haumea-Labs/HaumeaKMP.git")
+            developerConnection.set("scm:git:ssh://git@github.com:haumealabs/HaumeaKMP.git")
+            url.set("https://https://github.com/Haumea-Labs/HaumeaKMP")
         }
     }
 
-    publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
 
     signAllPublications()
-
-
-
-
 }

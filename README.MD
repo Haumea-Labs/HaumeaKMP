@@ -102,4 +102,4 @@ try {
    ossrhUsername=[Sonatype token_user]
    ossrhPassword=[Sonatype token_password]
    ```
-5) Run `./gradlew :rating:publishAllPublicationsToSonatypeRepository`
+5) Run `./gradlew :haumeakmp:publishAllPublicationsToSonatypeRepository`

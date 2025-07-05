@@ -28,7 +28,7 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-includeBuild("convention-plugins")
+
 include(":haumeakmp")
 include(":sample:composeApp")
 
