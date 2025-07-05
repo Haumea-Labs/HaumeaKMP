@@ -21,8 +21,13 @@ fun App() {
     val haumeaClient = remember {
         HaumeaClient(
             apiKey = "hml_4k9x2p8n7q6w5e3r1t0y9u8i7o6p5a4s3d2f1g0h",
-            appId = "com.haumealabs.aiphoto"
+            appId = "com.haumealabs.haumeasample"
         )
+    }
+
+    LaunchedEffect(Unit) {
+        haumeaClient.userId = "user123"
+        haumeaClient.addLog("debug", "App started")
     }
     
     val coroutineScope = rememberCoroutineScope()
@@ -39,10 +44,12 @@ fun App() {
             
             haumeaClient.fetchConfig()
                 .onSuccess { config ->
+                    haumeaClient.addLog("debug", "Successfully fetched config: $config")
                     flags = config
                     errorMessage = null
                 }
                 .onFailure { error ->
+                    haumeaClient.addLog("error", "Failed to fetch config: ${error.message}")
                     errorMessage = error.message
                     flags = null
                     rawResponse = error.cause?.message
@@ -84,7 +91,13 @@ fun App() {
                 )
                 
                 Button(
-                    onClick = { fetchConfig() },
+                    onClick = {
+                        haumeaClient.addEvent(
+                            eventName = "button_click",
+                            params = mapOf("button_name" to "submit", "screen" to "home")
+                        )
+                        fetchConfig()
+                              },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isLoading,
                     colors = ButtonDefaults.buttonColors(
@@ -253,26 +266,11 @@ fun App() {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.padding(vertical = 16.dp)
                     ) {
-                        Text("Example Fibonacci:", style = MaterialTheme.typography.bodyMedium)
-                        Text("getFibonacciNumbers(7) = ${getFibonacciNumbers(7).joinToString(", ")}")
+                        Text("Sample App", style = MaterialTheme.typography.headlineSmall)
+                        Text("Tap the button to load configuration", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
-        }
-    }
-}
-
-// Keep the original Fibonacci function for the example
-private fun getFibonacciNumbers(n: Int): List<Int> {
-    return when (n) {
-        0 -> emptyList()
-        1 -> listOf(0)
-        else -> {
-            val result = mutableListOf(0, 1)
-            for (i in 2 until n) {
-                result.add(result[i-1] + result[i-2])
-            }
-            result
         }
     }
 }

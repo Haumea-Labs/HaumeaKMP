@@ -1,5 +1,8 @@
 package com.haumealabs.haumea
 
+import com.haumealabs.haumea.models.AddEventRequest
+import com.haumealabs.haumea.models.AddLogRequest
+import com.haumealabs.haumea.models.BaseResponse
 import com.haumealabs.haumea.models.RemoteResponse
 import com.haumealabs.haumea.platform.getPlatformType
 import io.ktor.client.*
@@ -13,6 +16,8 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,7 +39,9 @@ class HaumeaClient internal constructor(
      * The platform this client is configured for ("android" or "ios")
      */
     val platform: String,
-    private val baseUrl: String
+    private val baseUrl: String,
+    private val client: HttpClient = createHttpClient(apiKey, appId, platform),
+    private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 ) {
     /**
      * Creates a new HaumeaClient with automatic platform detection.
@@ -55,27 +62,17 @@ class HaumeaClient internal constructor(
         baseUrl = baseUrl
     )
 
-    private val client = HttpClient {
-        install(ContentNegotiation) {
-            json(Json {
-                prettyPrint = true
-                isLenient = true
-                ignoreUnknownKeys = true
-            })
-        }
-        install(Logging) {
-            logger = Logger.DEFAULT
-            level = LogLevel.HEADERS
-        }
-        defaultRequest {
-            header("x-api-key", apiKey)
-            header("app-id", appId)
-            header("platform", platform)
-            header(HttpHeaders.Accept, ContentType.Application.Json)
-        }
+    private val _configState = MutableStateFlow<Map<String, String>?>(null)
+
+
+    private fun generateRandomString(length: Int = 16): String {
+        val allowedChars = ('a'..'z') + ('A'..'Z') + ('0'..'9')
+        return (1..length)
+            .map { allowedChars.random() }
+            .joinToString("")
     }
 
-    private val _configState = MutableStateFlow<Map<String, String>?>(null)
+    var userId: String = generateRandomString()
     
     /**
      * A [StateFlow] that emits the current remote flags.
@@ -83,13 +80,11 @@ class HaumeaClient internal constructor(
      */
     val configState: StateFlow<Map<String, String>?> = _configState.asStateFlow()
 
-    private val coroutineScope = CoroutineScope(Dispatchers.IO)
-
     /**
      * Fetches the remote configuration from the Haumea Labs API.
      * Updates the [configState] with the received configuration.
      *
-     * @return The fetched [RemoteConfig] if successful, null otherwise
+     * @return A Result containing either the remote flags or an error message
      */
     /**
      * Fetches the remote configuration from the Haumea Labs API.
@@ -98,7 +93,7 @@ class HaumeaClient internal constructor(
     suspend fun fetchConfig(): Result<Map<String, String>> {
         return try {
             val response = client.get("$baseUrl/remote-config") {
-                // Headers are automatically added by defaultRequest
+                defaultHeaders()
             }
             
             val responseString = response.body<String>()
@@ -142,8 +137,8 @@ class HaumeaClient internal constructor(
         } catch (e: Exception) {
             val errorMsg = when (e) {
                 is kotlinx.serialization.SerializationException -> "Failed to parse server response: ${e.message}"
-                is io.ktor.client.plugins.ClientRequestException -> "Request failed: ${e.response.status.description}"
-                is io.ktor.client.plugins.ServerResponseException -> "Server error: ${e.message}"
+                is ClientRequestException -> "Request failed: ${e.response.status.description}"
+                is ServerResponseException -> "Server error: ${e.message}"
                 else -> "Failed to fetch remote config: ${e.message}"
             }
             println("Error: $errorMsg")
@@ -166,11 +161,86 @@ class HaumeaClient internal constructor(
         }
     }
 
+    fun addEvent(
+        eventName: String,
+        params: Map<String, String> = emptyMap(),
+        onSuccess: (BaseResponse) -> Unit = {},
+        onError: (Throwable) -> Unit = {}
+    ) {
+        coroutineScope.launch {
+            try {
+                val request = AddEventRequest(
+                    name = eventName,
+                    params = params
+                )
+
+                val response = client.post("$baseUrl/addEvent") {
+                    userIdHeaders(userId!!)
+                    contentType(ContentType.Application.Json)
+                    setBody(request)
+                }.body<BaseResponse>()
+
+                onSuccess(response)
+            } catch (e: Exception) {
+                onError(e)
+            }
+        }
+    }
+
+    fun addLog(
+        severity: String,
+        message: String,
+        onSuccess: (BaseResponse) -> Unit = {},
+        onError: (Throwable) -> Unit = {}
+    ) {
+        require(severity in listOf("debug", "info", "warn", "error")) {
+            "Invalid severity level. Must be one of: debug, info, warn, error"
+        }
+
+        coroutineScope.launch {
+            try {
+                val request = AddLogRequest(
+                    severity = severity,
+                    message = message
+                )
+
+                val response = client.post("$baseUrl/addLog") {
+                    userIdHeaders(userId!!)
+                    contentType(ContentType.Application.Json)
+                    setBody(request)
+                }.body<BaseResponse>()
+
+                onSuccess(response)
+            } catch (e: Exception) {
+                onError(e)
+            }
+        }
+    }
+
+
+    private fun HttpRequestBuilder.defaultHeaders() {
+        headers {
+            append("x-api-key", apiKey)
+            append("app-id", appId)
+            append("platform", platform)
+        }
+    }
+
+    private fun HttpRequestBuilder.userIdHeaders(userId: String) {
+        headers {
+            append("x-api-key", apiKey)
+            append("app-id", appId)
+            append("platform", platform)
+            append("userid", userId)
+        }
+    }
+
     /**
      * Cleans up resources used by the client.
      * Should be called when the client is no longer needed.
      */
     fun close() {
+        coroutineScope.cancel()
         client.close()
     }
 }

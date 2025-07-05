@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.haumealabs"
-version = "1.0.0"
+version = "1.0.1"
 
 kotlin {
     jvmToolchain(17)
@@ -23,10 +23,11 @@ kotlin {
             
             // Ktor
             implementation(libs.ktor.client.core)
-            implementation(libs.ktor.client.json)
+            implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.client.serialization)
             implementation(libs.ktor.client.logging)
             implementation(libs.kotlinx.serialization.json)
+            implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.5.0")
         }
 
         commonTest.dependencies {
