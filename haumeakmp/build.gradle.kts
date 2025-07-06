@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.haumealabs"
-version = "1.0.1"
+version = "1.0.2"
 
 kotlin {
     jvmToolchain(17)
@@ -19,15 +19,15 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(libs.kotlinx.coroutines.core)
+            api(libs.kotlinx.coroutines.core)
             
-            // Ktor
-            implementation(libs.ktor.client.core)
-            implementation(libs.ktor.client.content.negotiation)
-            implementation(libs.ktor.client.serialization)
-            implementation(libs.ktor.client.logging)
-            implementation(libs.kotlinx.serialization.json)
-            implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.5.0")
+            // Ktor - expose these as they're part of the public API
+            api(libs.ktor.client.core)
+            api(libs.ktor.client.content.negotiation)
+            api(libs.ktor.client.serialization)
+            api(libs.ktor.client.logging)
+            api(libs.kotlinx.serialization.json)
+            api("org.jetbrains.kotlinx:kotlinx-datetime:0.5.0")
         }
 
         commonTest.dependencies {
