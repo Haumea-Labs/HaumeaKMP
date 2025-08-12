@@ -1,25 +1,36 @@
 package com.haumealabs.haumea.models
 
-import kotlinx.datetime.Clock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-// Add these data classes to your models package
+/**
+ * Events/Logs payloads for Supabase Edge Functions ingestion API.
+ */
+
 @Serializable
-data class AddEventRequest(
+data class EventItem(
     val name: String,
-    val timestamp: Long = Clock.System.now().toEpochMilliseconds(),
-    val params: Map<String, String> = emptyMap()
+    val properties: Map<String, String>? = null,
+    @SerialName("created_at") val createdAt: String? = null // ISO 8601, optional
 )
 
 @Serializable
-data class AddLogRequest(
-    @SerialName("severity")
-    val severity: String,
-    @SerialName("message")
+data class LogItem(
+    val level: String,
     val message: String,
-    @SerialName("timestamp")
-    val timestamp: Long = Clock.System.now().toEpochMilliseconds()
+    @SerialName("created_at") val createdAt: String? = null // ISO 8601, optional
+)
+
+@Serializable
+data class SendEventsRequest(
+    val apiKey: String,
+    val events: List<EventItem>
+)
+
+@Serializable
+data class SendLogsRequest(
+    val apiKey: String,
+    val logs: List<LogItem>
 )
 
 @Serializable

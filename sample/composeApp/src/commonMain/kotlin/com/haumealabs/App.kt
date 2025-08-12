@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
 fun App() {
     val haumeaClient = remember {
         HaumeaClient(
-            apiKey = "hml_4k9x2p8n7q6w5e3r1t0y9u8i7o6p5a4s3d2f1g0h",
+            apiKey = "be48a7f4-0e63-4c63-8633-d4844508dea6",
             appId = "com.haumealabs.haumeasample"
         )
     }

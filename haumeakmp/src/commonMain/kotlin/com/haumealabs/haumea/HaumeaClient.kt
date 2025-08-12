@@ -1,9 +1,11 @@
 package com.haumealabs.haumea
 
-import com.haumealabs.haumea.models.AddEventRequest
-import com.haumealabs.haumea.models.AddLogRequest
 import com.haumealabs.haumea.models.BaseResponse
-import com.haumealabs.haumea.models.RemoteResponse
+import com.haumealabs.haumea.models.EventItem
+import com.haumealabs.haumea.models.LogItem
+import com.haumealabs.haumea.models.RemoteFlagsResponse
+import com.haumealabs.haumea.models.SendEventsRequest
+import com.haumealabs.haumea.models.SendLogsRequest
 import com.haumealabs.haumea.platform.getPlatformType
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -13,6 +15,7 @@ import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import io.ktor.client.statement.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -30,7 +33,7 @@ import kotlinx.serialization.json.Json
  * @property apiKey The API key for authentication
  * @property appId The unique identifier for your application
  * @property platform The platform the app is running on (e.g., "android", "ios")
- * @property baseUrl The base URL of the Haumea Labs API (defaults to production)
+     * @property baseUrl The base URL of the Haumea Labs API (defaults to Supabase Edge Functions)
  */
 class HaumeaClient internal constructor(
     private val apiKey: String,
@@ -53,11 +56,11 @@ class HaumeaClient internal constructor(
     constructor(
         apiKey: String,
         appId: String,
-        baseUrl: String = "https://api.haumealabs.com"
+        baseUrl: String = "https://tgkcqvkyxpephsbhrkqm.functions.supabase.co"
     ) : this(
         apiKey = apiKey,
         appId = appId,
-        platform = getPlatformType().name.lowercase().lowercase().takeIf { it in setOf("android", "ios") }
+        platform = getPlatformType().name.lowercase().takeIf { it in setOf("android", "ios") }
             ?: throw IllegalArgumentException("Platform must be either 'android' or 'ios'"),
         baseUrl = baseUrl
     )
@@ -86,63 +89,24 @@ class HaumeaClient internal constructor(
      *
      * @return A Result containing either the remote flags or an error message
      */
-    /**
-     * Fetches the remote configuration from the Haumea Labs API.
-     * @return A Result containing either the remote flags or an error message
-     */
     suspend fun fetchConfig(): Result<Map<String, String>> {
         return try {
-            val response = client.get("$baseUrl/remote-config") {
-                defaultHeaders()
+            val response = client.get("$baseUrl/sdk-flags") {
+                header("x-api-key", apiKey)
+                accept(ContentType.Application.Json)
             }
-            
-            val responseString = response.body<String>()
-            println("Raw response ($response): $responseString")
-            
-            when (response.status) {
-                HttpStatusCode.OK -> {
-                    val remoteResponse = RemoteResponse.fromJsonString(responseString)
-                    when (remoteResponse) {
-                        is RemoteResponse.Success -> {
-                            val flags = remoteResponse.remoteFlags.ifEmpty {
-                                remoteResponse.data ?: emptyMap()
-                            }
-                            _configState.value = flags
-                            Result.success(flags)
-                        }
-                        is RemoteResponse.Error -> {
-                            val errorMsg = buildString {
-                                append(remoteResponse.error ?: "Unknown error")
-                                remoteResponse.message?.let { append(": $it") }
-                                remoteResponse.appId?.let { append(" (app_id: $it)") }
-                                remoteResponse.platform?.let { append(", platform: $it") }
-                            }
-                            Result.failure(Exception(errorMsg))
-                        }
-                    }
-                }
-                HttpStatusCode.Unauthorized -> {
-                    Result.failure(Exception("Invalid or missing API key"))
-                }
-                HttpStatusCode.NotFound -> {
-                    Result.failure(Exception("Application not found (app_id: $appId, platform: $platform)"))
-                }
-                HttpStatusCode.BadRequest -> {
-                    Result.failure(Exception("Bad request: ${response.status.description}"))
-                }
-                else -> {
-                    Result.failure(Exception("Server error: ${response.status.description}"))
-                }
+
+            if (response.status == HttpStatusCode.OK) {
+                val body = response.body<RemoteFlagsResponse>()
+                val flags = body.flags.associate { it.key to it.value }
+                _configState.value = flags
+                Result.success(flags)
+            } else {
+                val text = response.bodyAsText()
+                Result.failure(Exception("${response.status.value} ${response.status.description}: $text"))
             }
         } catch (e: Exception) {
-            val errorMsg = when (e) {
-                is kotlinx.serialization.SerializationException -> "Failed to parse server response: ${e.message}"
-                is ClientRequestException -> "Request failed: ${e.response.status.description}"
-                is ServerResponseException -> "Server error: ${e.message}"
-                else -> "Failed to fetch remote config: ${e.message}"
-            }
-            println("Error: $errorMsg")
-            Result.failure(Exception(errorMsg, e))
+            Result.failure(Exception("Failed to fetch remote config: ${e.message}", e))
         }
     }
 
@@ -169,18 +133,25 @@ class HaumeaClient internal constructor(
     ) {
         coroutineScope.launch {
             try {
-                val request = AddEventRequest(
-                    name = eventName,
-                    params = params
+                val payload = SendEventsRequest(
+                    apiKey = apiKey,
+                    events = listOf(
+                        EventItem(name = eventName, properties = if (params.isEmpty()) null else params)
+                    )
                 )
 
-                val response = client.post("$baseUrl/addEvent") {
-                    userIdHeaders(userId!!)
+                val response = client.post("$baseUrl/sdk-events") {
                     contentType(ContentType.Application.Json)
-                    setBody(request)
-                }.body<BaseResponse>()
+                    setBody(payload)
+                }
 
-                onSuccess(response)
+                if (response.status == HttpStatusCode.OK) {
+                    val text = response.bodyAsText()
+                    onSuccess(BaseResponse(success = true, message = text))
+                } else {
+                    val text = response.bodyAsText()
+                    onError(Exception("${response.status.value} ${response.status.description}: $text"))
+                }
             } catch (e: Exception) {
                 onError(e)
             }
@@ -193,47 +164,34 @@ class HaumeaClient internal constructor(
         onSuccess: (BaseResponse) -> Unit = {},
         onError: (Throwable) -> Unit = {}
     ) {
-        require(severity in listOf("debug", "info", "warn", "error")) {
-            "Invalid severity level. Must be one of: debug, info, warn, error"
-        }
-
         coroutineScope.launch {
             try {
-                val request = AddLogRequest(
-                    severity = severity,
-                    message = message
+                val payload = SendLogsRequest(
+                    apiKey = apiKey,
+                    logs = listOf(
+                        LogItem(level = severity, message = message)
+                    )
                 )
 
-                val response = client.post("$baseUrl/addLog") {
-                    userIdHeaders(userId!!)
+                val response = client.post("$baseUrl/sdk-logs") {
                     contentType(ContentType.Application.Json)
-                    setBody(request)
-                }.body<BaseResponse>()
+                    setBody(payload)
+                }
 
-                onSuccess(response)
+                if (response.status == HttpStatusCode.OK) {
+                    val text = response.bodyAsText()
+                    onSuccess(BaseResponse(success = true, message = text))
+                } else {
+                    val text = response.bodyAsText()
+                    onError(Exception("${response.status.value} ${response.status.description}: $text"))
+                }
             } catch (e: Exception) {
                 onError(e)
             }
         }
     }
 
-
-    private fun HttpRequestBuilder.defaultHeaders() {
-        headers {
-            append("x-api-key", apiKey)
-            append("app-id", appId)
-            append("platform", platform)
-        }
-    }
-
-    private fun HttpRequestBuilder.userIdHeaders(userId: String) {
-        headers {
-            append("x-api-key", apiKey)
-            append("app-id", appId)
-            append("platform", platform)
-            append("userid", userId)
-        }
-    }
+    // No default headers; each endpoint has distinct requirements in the new backend.
 
     /**
      * Cleans up resources used by the client.

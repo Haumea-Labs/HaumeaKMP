@@ -20,17 +20,16 @@ Add the dependency to your `build.gradle.kts`:
 sourceSets {
     commonMain {
         dependencies {
-            implementation("com.haumealabs:haumea:1.0.1")
+            implementation("com.haumealabs:haumea-kmp:1.1.0")
         }
     }
 }
 
-// For Android projects
-implementation("com.haumealabs:haumea:1.0.1")
-
-// For iOS projects
-pod("Haumea", "com.haumealabs:haumea:1.0.1")
+// For Android-only projects
+implementation("com.haumealabs:haumea-kmp:1.1.0")
 ```
+
+Note: CocoaPods integration is not required; consume the KMP artifact directly in your shared module.
 
 ## Usage
 
@@ -42,7 +41,7 @@ import com.haumealabs.haumea.HaumeaClient
 // Initialize the client with required parameters
 val haumeaClient = HaumeaClient(
     apiKey = "your-api-key",
-    appId = "your-app-id" // e.g., "com.yourcompany.app"
+    appId = "your-app-id" // required by constructor; not used by the current backend
 )
 
 // Optionally set a custom user ID
@@ -52,16 +51,13 @@ haumeaClient.userId = "custom-user-id"
 ### Remote Configuration
 
 ```kotlin
-// Fetch configuration
-haumeaClient.fetchConfig(
-    onSuccess = { config ->
-        // Use the configuration
-        val featureEnabled = config["feature_flag"]?.toBoolean() ?: false
-    },
-    onError = { error ->
-        // Handle error
-    }
-)
+// Fetch configuration (suspending)
+val result = haumeaClient.fetchConfig()
+result.onSuccess { config ->
+    val featureEnabled = config["feature_flag"]?.toBoolean() ?: false
+}.onFailure { error ->
+    // Handle error
+}
 
 // Or observe configuration changes
 haumeaClient.configState.collect { config ->
@@ -81,12 +77,8 @@ haumeaClient.addEvent(
         "button_name" to "submit",
         "screen" to "home"
     ),
-    onSuccess = { response ->
-        // Event sent successfully
-    },
-    onError = { error ->
-        // Handle error
-    }
+    onSuccess = { /* sent */ },
+    onError = { /* handle */ }
 )
 ```
 
@@ -95,14 +87,10 @@ haumeaClient.addEvent(
 ```kotlin
 // Send a log with severity
 haumeaClient.addLog(
-    severity = "info", // "debug", "info", "warn", or "error"
+    severity = "info", // recommended: "debug", "info", "warn", "error"
     message = "User completed onboarding",
-    onSuccess = { response ->
-        // Log sent successfully
-    },
-    onError = { error ->
-        // Handle error
-    }
+    onSuccess = { /* sent */ },
+    onError = { /* handle */ }
 )
 ```
 
@@ -118,8 +106,16 @@ haumeaClient.close()
 All network operations are non-blocking and include error callbacks. Common error cases include:
 
 - Network connectivity issues
-- Invalid API key or app ID
+- Invalid API key
 - Server errors
+
+## Backend
+
+- Default base URL: `https://tgkcqvkyxpephsbhrkqm.functions.supabase.co`
+- Endpoints used by the client:
+  - `GET /sdk-flags` (reads remote flags; sends `x-api-key` header)
+  - `POST /sdk-events` (batches events; body `{ apiKey, events: [...] }`)
+  - `POST /sdk-logs` (batches logs; body `{ apiKey, logs: [...] }`)
 
 ## Sample App
 
@@ -131,6 +127,6 @@ The repository includes a sample Compose Multiplatform app demonstrating the lib
 
 ## Requirements
 
-- Kotlin 1.9.0 or higher
+- Kotlin 2.1.0 or higher
 - Android API 21+
 - iOS 13.0+
